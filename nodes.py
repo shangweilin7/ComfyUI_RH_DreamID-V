@@ -17,16 +17,15 @@ from PIL import Image, ImageOps
 
 import cv2
 import numpy as np
-from .express_adaption.media_pipe import FaceMeshDetector, FaceMeshAlign_dreamidv
-from .express_adaption.get_video_npy import get_video_npy
 import folder_paths
-from .express_adaption.get_video_npy import prehandle_video
 try:
     from comfy_api.input_impl.video_types import VideoFromFile
 except ImportError:
     VideoFromFile = None
 
 def generate_pose_and_mask_videos(ref_video_path, ref_image_path, face_detection_threshold=0.5):
+    from .express_adaption.get_video_npy import get_video_npy
+    from .express_adaption.media_pipe import FaceMeshDetector, FaceMeshAlign_dreamidv
 
     print("Starting online generation of pose and mask videos...")
     detector = FaceMeshDetector()

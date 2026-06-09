@@ -29,14 +29,20 @@ from IPython.display import display, Image as IPyImage
 import torchvision.transforms as T
 
 import sys
-from .media_pipe.mp_utils  import LMKExtractor
-from .media_pipe.draw_util import FaceMeshVisualizer
-from .media_pipe.pose_util import project_points_with_trans, matrix_to_euler_and_translation, euler_and_translation_to_matrix
 
-lmk_extractor = LMKExtractor()
-vis = FaceMeshVisualizer(forehead_edge=False)
+_lmk_extractor = None
+
+
+def _get_lmk_extractor():
+    global _lmk_extractor
+    if _lmk_extractor is None:
+        from .media_pipe.mp_utils import LMKExtractor
+
+        _lmk_extractor = LMKExtractor()
+    return _lmk_extractor
 
 def prehandle_video(video_path, save_path, fps=24):
+    lmk_extractor = _get_lmk_extractor()
     frames = imageio.get_reader(video_path)
     meta = frames.get_meta_data()
 
@@ -65,8 +71,7 @@ def prehandle_video(video_path, save_path, fps=24):
     return skip_frames_index, skip_frames_data
 
 def get_video_npy(video_path, face_detection_threshold=0.5):
-
-    
+    lmk_extractor = _get_lmk_extractor()
 
     frames = imageio.get_reader(video_path)
     # print(f'frames count: {len(frames)}')
