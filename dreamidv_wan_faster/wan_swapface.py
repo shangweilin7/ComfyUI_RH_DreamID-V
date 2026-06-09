@@ -22,6 +22,7 @@ import types
 from contextlib import contextmanager
 from functools import partial
 
+import cv2
 import torch
 import torch.cuda.amp as amp
 import torch.distributed as dist
@@ -39,6 +40,28 @@ from .utils.na_resize import NaResize, DivisibleCrop, Rearrange
 from torchvision.transforms import ToTensor,Normalize,Compose
 import math
 from PIL import Image, ImageOps
+
+
+def _load_video_frames(path: str) -> list[Image.Image]:
+    cap = cv2.VideoCapture(path)
+    if not cap.isOpened():
+        raise ValueError(f"Unable to open video: {path}")
+
+    frames = []
+    try:
+        while True:
+            ok, frame = cap.read()
+            if not ok:
+                break
+            frame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
+            frames.append(Image.fromarray(frame))
+    finally:
+        cap.release()
+
+    if not frames:
+        raise ValueError(f"No frames found in video: {path}")
+
+    return frames
 
 class DreamIDV:
 
@@ -277,18 +300,11 @@ class DreamIDV:
         }
         video_h = 0
         video_w = 0
-        from decord import VideoReader
         for i, path in enumerate(paths):
             
             if is_image_or_video_by_extension(path) == "video" and i == 0:
                 print('ori_path', path)
-                vr = VideoReader(path)
-                frames = []
-
-                for idx in range(vr.__len__()):
-                    frame = vr[idx].asnumpy()
-                    frame = Image.fromarray(frame)
-                    frames.append(frame)
+                frames = _load_video_frames(path)
                 video_w = frames[0].size[0]
                 video_h = frames[0].size[1]
             
@@ -318,12 +334,7 @@ class DreamIDV:
 
             elif is_image_or_video_by_extension(path) == "video" and i == 1:
                 print('mask_path', path)
-                vr = VideoReader(path)
-                frames = []
-                for idx in range(vr.__len__()):
-                    frame = vr[idx].asnumpy()
-                    frame = Image.fromarray(frame)
-                    frames.append(frame)
+                frames = _load_video_frames(path)
                 video_w = frames[0].size[0]
                 video_h = frames[0].size[1]
                 

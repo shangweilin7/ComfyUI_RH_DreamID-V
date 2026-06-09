@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import base64
+import importlib.util
 import logging
 import math
 import os
@@ -12,6 +13,7 @@ import warnings
 from functools import lru_cache
 from io import BytesIO
 
+import cv2
 import requests
 import torch
 import torchvision
@@ -213,9 +215,11 @@ def _read_video_torchvision(ele: dict,) -> torch.Tensor:
 
 
 def is_decord_available() -> bool:
-    import importlib.util
-
     return importlib.util.find_spec("decord") is not None
+
+
+def is_opencv_available() -> bool:
+    return importlib.util.find_spec("cv2") is not None
 
 
 def _read_video_decord(ele: dict,) -> torch.Tensor:
@@ -249,8 +253,52 @@ def _read_video_decord(ele: dict,) -> torch.Tensor:
     return video
 
 
+def _read_video_opencv(ele: dict,) -> torch.Tensor:
+    video_path = ele["video"]
+    if video_path.startswith("file://"):
+        video_path = video_path[7:]
+
+    if video_path.startswith("http://") or video_path.startswith("https://"):
+        raise ValueError("OpenCV backend does not support http/https video paths.")
+
+    if "video_start" in ele or "video_end" in ele:
+        raise NotImplementedError(
+            "video_start and video_end are not supported in the OpenCV backend."
+        )
+
+    st = time.time()
+    cap = cv2.VideoCapture(video_path)
+    if not cap.isOpened():
+        raise ValueError(f"Unable to open video: {video_path}")
+    video_fps = cap.get(cv2.CAP_PROP_FPS) or FPS
+
+    frames = []
+    try:
+        while True:
+            ok, frame = cap.read()
+            if not ok:
+                break
+            frame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
+            frames.append(torch.from_numpy(frame).permute(2, 0, 1))
+    finally:
+        cap.release()
+
+    if not frames:
+        raise ValueError(f"No frames found in video: {video_path}")
+
+    video = torch.stack(frames, dim=0)
+    total_frames = video.size(0)
+    logger.info(
+        f"opencv: {video_path=}, {total_frames=}, {video_fps=}, time={time.time() - st:.3f}s"
+    )
+    nframes = smart_nframes(ele, total_frames=total_frames, video_fps=video_fps)
+    idx = torch.linspace(0, total_frames - 1, nframes).round().long()
+    return video[idx]
+
+
 VIDEO_READER_BACKENDS = {
     "decord": _read_video_decord,
+    "opencv": _read_video_opencv,
     "torchvision": _read_video_torchvision,
 }
 
@@ -263,6 +311,8 @@ def get_video_reader_backend() -> str:
         video_reader_backend = FORCE_QWENVL_VIDEO_READER
     elif is_decord_available():
         video_reader_backend = "decord"
+    elif is_opencv_available():
+        video_reader_backend = "opencv"
     else:
         video_reader_backend = "torchvision"
     print(

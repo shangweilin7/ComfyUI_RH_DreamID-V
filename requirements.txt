@@ -4,7 +4,6 @@ easydict
 numpy
 Pillow
 opencv-python
-decord
 tqdm
 mediapipe
 
